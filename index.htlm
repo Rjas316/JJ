@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Study & Tasks Prototype</title>
+	<style>
+		:root{--bg:#ffffff;--card:#ffffff;--muted:#6b7280;--accent:#2563eb}
+		html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+		body{background:var(--bg);color:#0b1220}
+		.app{display:flex;height:100vh}
+		.sidebar{width:260px;padding:16px;background:#f8fafc;box-shadow:inset -1px 0 0 rgba(11,18,32,0.04)}
+		.brand{font-weight:700;font-size:18px;margin-bottom:12px}
+		button{background:transparent;border:1px solid rgba(255,255,255,0.06);color:inherit;padding:8px 10px;border-radius:8px;cursor:pointer}
+		.main{flex:1;display:flex;flex-direction:column;padding:18px;gap:12px}
+		.row{display:flex;gap:12px}
+		.card{background:var(--card);padding:12px;border-radius:10px;border:1px solid rgba(11,18,32,0.04)}
+		.pane{flex:1;min-height:200px}
+		.todo-list{display:flex;flex-direction:column;gap:8px}
+		.todo{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;background:#f3f4f6}
+		.todo .title{flex:1}
+		input[type=text],textarea{background:transparent;border:1px solid rgba(255,255,255,0.04);color:inherit;padding:8px;border-radius:8px}
+		.muted{color:var(--muted);font-size:13px}
+		.controls{display:flex;gap:8px;align-items:center}
+		.tags{display:flex;gap:6px;flex-wrap:wrap}
+		.tag{background:rgba(96,165,250,0.12);color:var(--accent);padding:4px 8px;border-radius:999px;font-size:12px}
+		.editor{min-height:120px;border-radius:8px;padding:10px;border:1px dashed rgba(11,18,32,0.06);background:transparent;color:inherit}
+		.small{font-size:13px}
+		.flex-col{display:flex;flex-direction:column}
+		.spacer{flex:1}
+		.search{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(11,18,32,0.06);background:transparent;color:inherit}
+		footer{font-size:12px;color:var(--muted);text-align:center;padding:8px}
+		.btn-primary{background:linear-gradient(90deg,var(--accent),#7dd3fc);border:none;color:#012033}
+	</style>
+</head>
+<body>
+	<div class="app">
+		<aside class="sidebar card">
+			<div class="brand">Study & Tasks</div>
+			<div class="muted">Local prototype • Stored in localStorage</div>
+			<hr />
+			<div style="margin-top:8px">
+				<input id="globalSearch" class="search" placeholder="Search tasks & notes" />
+			</div>
+			<div style="margin-top:12px;display:flex;gap:8px">
+				<button id="btnNewTodo">+ Todo</button>
+			</div>
+			<div style="margin-top:14px">
+				<div class="muted">Tags</div>
+				<div id="tagList" class="tags" style="margin-top:8px"></div>
+			</div>
+			<div style="margin-top:18px;display:flex;gap:8px">
+				<button id="btnExport">Export</button>
+				<button id="btnImport">Import</button>
+			</div>
+			<div style="margin-top:20px" class="muted small">Tip: Use the editor to create rich content. Press review on a study card to schedule next review.</div>
+		</aside>
+
+		<main class="main">
+			<div class="row">
+				<section class="card pane" style="flex:0.6">
+					<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+						<h3 style="margin:0">Tasks</h3>
+						<div class="spacer"></div>
+						<div class="muted small" id="taskCount"></div>
+					</div>
+					<div id="todoList" class="todo-list"></div>
+				</section>
+
+				<section class="card pane" style="flex:0.4" id="aiPane">
+					<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+						<h3 style="margin:0">AI Assistant</h3>
+						<div class="spacer"></div>
+						<div class="muted small">Local / API-driven</div>
+					</div>
+					<div id="aiMessages" style="min-height:180px;max-height:360px;overflow:auto;padding:8px;border-radius:8px;background:#f8fafc;border:1px solid rgba(11,18,32,0.04)"></div>
+					<div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+						<input id="aiInput" type="text" placeholder="Ask the assistant..." style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(11,18,32,0.06)" />
+						<button id="btnSendAI" class="btn-primary">Send</button>
+					</div>
+					<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+						<input id="apiKey" type="password" placeholder="Paste OpenAI API key (optional)" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(11,18,32,0.06)" />
+						<button id="btnSaveKey">Save</button>
+					</div>
+				</section>
+			</div>
+
+			<footer>Prototype — data stored locally. Export to backup.</footer>
+		</main>
+	</div>
+
+	<input id="importFile" type="file" accept="application/json" style="display:none" />
+
+	<script>
+		// Simple local-model app
+		const STORAGE_KEY='studyapp:v1'
+		let state = {todos:[],cards:[],notes:[]}
+
+		function load(){
+			try{const raw=localStorage.getItem(STORAGE_KEY); if(raw) state=JSON.parse(raw)}catch(e){console.error(e)}
+		}
+		function save(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
+
+		function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+
+		// Todos
+		function addTodo(text){state.todos.unshift({id:uid(),title:text,done:false,tags:[],created:Date.now()}); save(); render()}
+		function toggleTodo(id){const t=state.todos.find(x=>x.id===id); if(!t) return; t.done=!t.done; save(); render()}
+		function deleteTodo(id){state.todos=state.todos.filter(x=>x.id!==id); save(); render()}
+
+		// AI chats stored in state.aiChats
+		if(!state.aiChats) state.aiChats = []
+		function saveChat(role, text){ state.aiChats.push({id:uid(),role,text,created:Date.now()}); save(); renderAI() }
+
+		// UI
+		const todoListEl=document.getElementById('todoList')
+		const cardListEl = null
+		const editor = null
+		const editorTitle = null
+		const aiMessagesEl = document.getElementById('aiMessages')
+		const aiInput = document.getElementById('aiInput')
+		const apiKeyInput = document.getElementById('apiKey')
+
+		function render(){
+			// todos
+			todoListEl.innerHTML=''
+			const q = document.getElementById('globalSearch').value.trim().toLowerCase()
+			const filteredTodos = state.todos.filter(t=>!q || (t.title && t.title.toLowerCase().includes(q)))
+			filteredTodos.forEach(t=>{
+				const el=document.createElement('div'); el.className='todo'
+				el.innerHTML = `
+					<input type="checkbox" ${t.done ? 'checked' : ''} />
+					<div class="title${t.done? ' muted':''}">${escapeHtml(t.title)}</div>
+					<div class="controls">
+						<button data-id="${t.id}" class="del">✕</button>
+					</div>`
+				el.querySelector('input').addEventListener('change',()=>toggleTodo(t.id))
+				el.querySelector('.del').addEventListener('click',()=>deleteTodo(t.id))
+				todoListEl.appendChild(el)
+			})
+			document.getElementById('taskCount').textContent = `${state.todos.length} total`
+
+			// cards removed; no-op for AI + tasks view
+			document.getElementById('dueCount') && (document.getElementById('dueCount').textContent = '')
+
+			// tags
+			const tagListEl=document.getElementById('tagList')
+			const tags = collectTags()
+			tagListEl.innerHTML = tags.map(t=>`<div class="tag">${escapeHtml(t)}</div>`).join('')
+		}
+
+		function collectTags(){
+			const s = new Set()
+			;[...state.todos, ...(state.cards||[]), ...(state.notes||[])].forEach(it=>{(it.tags||[]).forEach(t=>s.add(t))})
+			return [...s].slice(0,12)
+		}
+
+		// card modal removed
+
+		// helpers
+		function escapeHtml(s){ if(!s) return ''; return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+		// wire up controls
+		document.getElementById('btnNewTodo').addEventListener('click',()=>{ const text = prompt('Todo title'); if(text) addTodo(text) })
+		document.getElementById('btnNewCard').addEventListener('click',()=>{ const f=prompt('Front (question)'); const b=prompt('Back (answer)'); if(f||b) addCard(f||'[empty]', (b||'').replace(/\n/g,'<br/>')) })
+		document.getElementById('saveAsNote').addEventListener('click',()=>{ saveNote(editorTitle.value||'Untitled', editor.innerHTML, (document.getElementById('editorTags').value||'').split(',').map(s=>s.trim()).filter(Boolean)); editorTitle.value=''; editor.innerHTML=''; document.getElementById('editorTags').value=''; alert('Saved note locally') })
+		document.getElementById('globalSearch').addEventListener('input',render)
+
+		document.getElementById('btnExport').addEventListener('click',()=>{
+			const data = JSON.stringify(state, null, 2)
+			const blob = new Blob([data],{type:'application/json'})
+			const url = URL.createObjectURL(blob)
+			const a = document.createElement('a'); a.href=url; a.download='studyapp-export.json'; a.click(); URL.revokeObjectURL(url)
+		})
+		document.getElementById('btnImport').addEventListener('click',()=>document.getElementById('importFile').click())
+		document.getElementById('importFile').addEventListener('change',async e=>{
+			const f=e.target.files[0]; if(!f) return; const txt = await f.text(); try{ const parsed = JSON.parse(txt); state = parsed; save(); render(); alert('Imported') }catch(err){alert('Invalid file')}
+		})
+
+		// initial
+		load(); render();
+
+		// Expose for debugging
+		window.studyApp = {state, save, load, addTodo, addCard}
+	</script>
+</body>
+</html>
+
+
